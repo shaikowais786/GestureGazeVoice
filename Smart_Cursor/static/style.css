@@ -1,0 +1,56 @@
+body {
+    font-family: Arial;
+    background: #f5f6fa;
+    text-align: center;
+}
+
+/* CENTERING FIX */
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#msg {
+    margin-top: 15px;
+    font-weight: bold;
+    color: green;
+}
+/* CARD */
+.card {
+    background: white;
+    padding: 30px;
+    width: 350px;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* INPUT FIELDS */
+input {
+    width: 90%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+}
+
+/* BUTTONS */
+button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+}
+
+.blue {
+    background: #2e6cff;
+}
+
+.red {
+    background: #e63946;
+}
+
+button:hover {
+    opacity: 0.8;
+}

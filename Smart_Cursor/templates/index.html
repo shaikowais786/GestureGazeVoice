@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Online Exam Portal | Secure Session</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { background-color: #f0f2f5; }
+        #camera-container { 
+            position: fixed; top: 15px; right: 15px; 
+            border: 4px solid #d93025; border-radius: 12px; 
+            background: white; padding: 5px; z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        #camera-container p { margin: 0; font-size: 11px; font-weight: bold; text-align: center; color: #d93025; }
+        
+        .hidden { display: none; }
+        
+        #timer { font-size: 26px; text-align: center; margin: 20px; color: #d93025; font-weight: bold; }
+        
+        .question-card { 
+            width: 90%; max-width: 700px; margin: 40px auto; 
+            padding: 35px; border-radius: 15px; background: white; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+        }
+        
+        .question-text { font-size: 22px; font-weight: bold; margin-bottom: 20px; color: #202124; }
+        
+        .options-list { display: flex; flex-direction: column; gap: 12px; }
+        
+        .option-item { 
+            padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; 
+            cursor: pointer; transition: 0.3s; display: flex; align-items: center; 
+        }
+        .option-item:hover { background-color: #e8f0fe; border-color: #1a73e8; }
+        .option-item input { margin-right: 15px; width: auto; }
+
+        #warningBox { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
+            background: #202124; color: white; padding: 15px 35px; 
+            border-radius: 50px; display: none; z-index: 2000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4); font-size: 18px;
+        }
+        
+        .btn-container { text-align: center; margin-top: 30px; }
+    </style>
+</head>
+<body>
+
+    <!-- LIVE CAMERA FEED -->
+    <div id="camera-container">
+        <p>🔴 MONITORING ACTIVE</p>
+        <img src="/video_feed" width="220" alt="Proctor Feed">
+    </div>
+
+    <h1>AI Proctored Examination</h1>
+    <div id="timer">Time Left: <span id="time">10:00</span></div>
+    <form action="/submit_exam" method="post">
+    <div id="exam-container">
+        
+        <!-- QUESTION 1 -->
+        <div class="question-card" id="q1">
+            <p class="question-text">1. x=[1,2,3]; print(x*2) results in?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q1" value="A"> [1,2,3,1,2,3]
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q1" value="B"> [2,4,6]
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q1" value="C"> Error
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q1" value="D"> [1,2,3,2]
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 2 -->
+        <div class="question-card hidden" id="q2">
+            <p class="question-text">2. Which of the following is Immutable?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q2" value="A"> Tuple
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q2" value="B"> List
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q2" value="C"> Dictionary
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q2" value="D"> Set
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 3 -->
+        <div class="question-card hidden" id="q3">
+            <p class="question-text">3. What is the output of len("Python")?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q3" value="A"> 5
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q3" value="B"> 6
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q3" value="C"> 7
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q3" value="D"> 0
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 4 -->
+        <div class="question-card hidden" id="q4">
+            <p class="question-text">4. Which keyword is used to define a function?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q4" value="A"> func
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q4" value="B"> def
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q4" value="C"> define
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q4" value="D"> function
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 5 -->
+        <div class="question-card hidden" id="q5">
+            <p class="question-text">5. What is the value of 2 ** 3 ** 2?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q5" value="A"> 64
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q5" value="B"> 512
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q5" value="C"> 256
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q5" value="D"> 36
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 6 -->
+        <div class="question-card hidden" id="q6">
+            <p class="question-text">6. x="hello"; print(x[1:4]) results in?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q6" value="A"> ell
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q6" value="B"> hel
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q6" value="C"> hlo
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q6" value="D"> ello
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 7 -->
+        <div class="question-card hidden" id="q7">
+            <p class="question-text">7. What is the result of int("10.5")?</p>
+            <div class="options-list">
+               <label class="option-item">
+                    <input type="radio" name="q7" value="A"> 10
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q7" value="B"> 10.5
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q7" value="C"> Error
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q7" value="D"> 11
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 8 -->
+        <div class="question-card hidden" id="q8">
+            <p class="question-text">8. Which block is used for exception handling?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q8" value="A"> try-except
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q8" value="B"> if-else
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q8" value="C"> loop
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q8" value="D"> switch
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 9 -->
+        <div class="question-card hidden" id="q9">
+            <p class="question-text">9. a=[1,2,3]; a.append([4,5]); len(a) is?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q9" value="A"> 3
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q9" value="B"> 4
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q9" value="C"> 5
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q9" value="D"> 6
+                </label>
+            </div>
+        </div>
+
+        <!-- QUESTION 10 -->
+        <div class="question-card hidden" id="q10">
+            <p class="question-text">10. Which is a property of a Python List?</p>
+            <div class="options-list">
+                <label class="option-item">
+                    <input type="radio" name="q10" value="A"> Immutable
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q10" value="B"> Allows Mixed Types
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q10" value="C"> No Duplicates
+                </label>
+                <label class="option-item">
+                    <input type="radio" name="q10" value="D"> Unordered Only
+                </label>
+
+            </div>
+        </div>
+        </div>
+            <div class="btn-container">
+                    <button type="button" id="nextBtn" onclick="nextQuestion()" class="blue" style="width:250px;">Next Question</button>
+                    <button type="submit" id="submitBtn" class="red hidden">Final Submit </button>
+            </div>
+        
+    </form>
+
+       
+    
+
+    <div id="warningBox"></div>
+
+    <script>
+        let current = 1;
+        let totalTime = 600; // 10 Minutes
+
+        function nextQuestion() {
+            document.getElementById("q" + current).classList.add("hidden");
+            current++;
+            
+            if (current <= 10) {
+                document.getElementById("q" + current).classList.remove("hidden");
+            }
+            
+            // Show submit button on last question
+            if (current === 10) {
+                document.getElementById("nextBtn").classList.add("hidden");
+                document.getElementById("submitBtn").classList.remove("hidden");
+            }
+        }
+
+        // TIMER LOGIC
+        setInterval(() => {
+            if (totalTime <= 0) window.location.href = "/submit_exam";
+            let m = Math.floor(totalTime / 60);
+            let s = totalTime % 60;
+            document.getElementById("time").innerText = `${m}:${s < 10 ? '0'+s : s}`;
+            totalTime--;
+        }, 1000);
+
+        // REAL-TIME PROCTORING STATUS
+        setInterval(async () => {
+            try {
+                const res = await fetch("/exam_status");
+                const data = await res.json();
+                
+                if (data.terminated) window.location.href = "/terminated";
+                
+                if (data.count > 0) {
+                    const box = document.getElementById("warningBox");
+                    box.style.display = "block";
+                    box.innerHTML = `🚨 <b>WARNING:</b> Violation ${data.count}/3 Detected!`;
+                }
+            } catch (e) { console.log("Proctor check failed"); }
+        }, 2000);
+    </script>
+</body>
+</html>

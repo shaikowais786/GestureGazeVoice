@@ -1,0 +1,486 @@
+import cv2
+import mediapipe as mp
+import pyautogui
+import numpy as np
+import time
+import math
+
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from camera_manager import shared_camera
+
+# 🔥 GLOBAL CONTROL FLAG
+running = False
+
+# Live status dictionary for playground monitoring
+control_status = {
+    "face_detected": False,
+    "hand_detected": False,
+    "blink_detected": False,
+    "cursor_active": False,
+    "last_action": "None"
+}
+
+
+def start_mouse_control(show_window=True):
+    global running, control_status
+
+    # 🔥 PREVENT MULTIPLE STARTS
+    if running:
+        print("Mouse already running")
+        return
+
+    running = True
+    control_status["cursor_active"] = True
+    control_status["last_action"] = "Started"
+
+    try:
+        log_file = open("pipeline_debug.log", "w", encoding="utf-8")
+        log_file.write("=== pipeline_debug.log initialized ===\n")
+        log_file.write("EVENT: Smart Control Started\n")
+        log_file.flush()
+        print("Smart Control Started")
+    except Exception as e:
+        print(f"Failed to open log file: {e}")
+        log_file = None
+
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0
+
+    screen_w, screen_h = pyautogui.size()
+
+    # ---------------- SETTINGS ----------------
+    smoothing = 10
+    margin = 0
+
+    max_ear = 0.0
+    BLINK_MIN = 0.05
+    DOUBLE_CLICK_GAP = 0.4
+
+    SCROLL_COOLDOWN = 0.08
+
+    # ---------------- FACE & HAND ----------------
+    face_base = python.BaseOptions(model_asset_path="face_landmarker.task")
+    face_options = vision.FaceLandmarkerOptions(
+        base_options=face_base,
+        num_faces=1,
+        min_face_detection_confidence=0.5,
+        min_face_presence_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+    face_detector = vision.FaceLandmarker.create_from_options(face_options)
+
+    hand_base = python.BaseOptions(model_asset_path="hand_landmarker.task")
+    hand_options = vision.HandLandmarkerOptions(base_options=hand_base, num_hands=1)
+    hand_detector = vision.HandLandmarker.create_from_options(hand_options)
+
+    if not shared_camera.start():
+        print("Failed to start shared camera in mouse control")
+        if log_file:
+            log_file.write("EVENT: Thread Stopped\n")
+            log_file.flush()
+        running = False
+        return
+    else:
+        if log_file:
+            log_file.write("EVENT: Camera Connected\n")
+            log_file.flush()
+        print("Camera Connected")
+
+    prev_x, prev_y = pyautogui.position()
+    min_x, max_x = 1, 0
+    min_y, max_y = 1, 0
+
+    blink_start = 0
+    last_click = 0
+    blink_locked_pos = None
+    post_click_freeze_frames = 0
+    hand_loss_frames = 0
+    face_loss_count = 0
+
+    ear_history = []
+    finger_history = []
+    last_scroll = 0
+
+    LEFT_EYE = [33, 160, 158, 133, 153, 144]
+    RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+
+    def dist(p1, p2):
+        return math.hypot(p1.x - p2.x, p1.y - p2.y)
+
+    def ear(lm, eye):
+        pts = [lm[i] for i in eye]
+        v = dist(pts[1], pts[5]) + dist(pts[2], pts[4])
+        h = dist(pts[0], pts[3])
+        return v / (2.0 * h)
+
+    last_frame_id = -1
+    while running:
+        ret, frame, last_frame_id = shared_camera.read(last_frame_id=last_frame_id)
+        if not ret:
+            if not shared_camera.running:
+                break
+            time.sleep(0.01)
+            continue
+
+        try:
+            frame = cv2.flip(frame, 1)
+            frame = cv2.resize(frame, (640, 480))
+
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+            # Initialize diagnostics variables
+            face_detected = False
+            eye_openness = 0.0
+            blink_state = "No Face"
+            blink_dur = 0.0
+            nose_coords = (0.0, 0.0)
+            target_coords = (prev_x, prev_y)
+            dynamic_threshold = 0.20
+            blink_detected = False
+            hand_detected = False
+            finger = None
+            hand_conf = 0.0
+            hand_bbox_w = 0.0
+            hand_bbox_h = 0.0
+
+            # ---------------- FACE ----------------
+            face = face_detector.detect(mp_image)
+
+            if face.face_landmarks:
+                face_detected = True
+                if log_file:
+                    log_file.write(f"EVENT: Face Detected | Frame: {last_frame_id}\n")
+                    log_file.flush()
+                face_loss_count = 0
+                lm = face.face_landmarks[0]
+                nose = lm[1]
+                nose_coords = (nose.x, nose.y)
+
+                min_x = min(min_x, nose.x)
+                max_x = max(max_x, nose.x)
+                min_y = min(min_y, nose.y)
+                max_y = max(max_y, nose.y)
+
+                # ---------------- BLINK CLICK ----------------
+                l_ear = ear(lm, LEFT_EYE)
+                r_ear = ear(lm, RIGHT_EYE)
+                avg = (l_ear + r_ear) / 2
+
+                # Adaptively track the maximum EAR seen (representing open-eye state)
+                if max_ear == 0.0 or avg > max_ear:
+                    max_ear = avg
+
+                # Dynamically calculate EAR threshold bounded between 0.16 and 0.22
+                dynamic_threshold = max(0.16, min(0.22, max_ear * 0.72))
+
+                ear_history.append(avg)
+                if len(ear_history) > 3:
+                    ear_history.pop(0)
+
+                smooth_ear = sum(ear_history) / len(ear_history)
+                eye_openness = smooth_ear
+
+                if smooth_ear < dynamic_threshold:
+                    if blink_start == 0:
+                        blink_start = time.time()
+                        blink_locked_pos = (prev_x, prev_y)
+                    blink_state = "Blinking"
+                    blink_dur = time.time() - blink_start
+                    blink_detected = True
+                else:
+                    blink_state = "Open"
+                    if blink_start != 0:
+                        duration = time.time() - blink_start
+                        blink_dur = duration
+                        blink_start = 0
+
+                        # Move back to stored position before clicking to ensure absolute click accuracy
+                        if blink_locked_pos is not None:
+                            pyautogui.moveTo(blink_locked_pos[0], blink_locked_pos[1])
+                            prev_x, prev_y = blink_locked_pos[0], blink_locked_pos[1]
+                            if log_file:
+                                log_file.write(f"EVENT: Cursor Update Sent (Blink Lock Move) | Target: ({prev_x:.1f}, {prev_y:.1f}) | Frame: {last_frame_id}\n")
+                                log_file.flush()
+
+                        if duration > BLINK_MIN:
+                            now = time.time()
+                            if now - last_click < DOUBLE_CLICK_GAP:
+                                pyautogui.doubleClick()
+                                control_status["last_action"] = "Double Click"
+                                if log_file:
+                                    log_file.write(f"EVENT: Double Click | Frame: {last_frame_id}\n")
+                                last_click = 0
+                            else:
+                                pyautogui.click()
+                                control_status["last_action"] = "Single Click"
+                                if log_file:
+                                    log_file.write(f"EVENT: Single Click | Frame: {last_frame_id}\n")
+                                last_click = now
+                            # Prevent cursor coordinate collisions by freezing updates for 5 frames
+                            post_click_freeze_frames = 5
+                        
+                        blink_locked_pos = None
+                    else:
+                        blink_dur = 0.0
+
+                # ---------------- CURSOR POSITION UPDATE ----------------
+                # Default target coordinates to current smoothed position in case bounding box is too small
+                target_x, target_y = prev_x, prev_y
+
+                if blink_state != "Blinking" and blink_locked_pos is None and post_click_freeze_frames == 0:
+                    if max_x - min_x > 0.01 and max_y - min_y > 0.01:
+                        # Enforce minimum bounding box spans to prevent high sensitivity
+                        span_x = max(max_x - min_x, 0.15)
+                        span_y = max(max_y - min_y, 0.10)
+
+                        mid_x = (min_x + max_x) / 2
+                        mid_y = (min_y + max_y) / 2
+
+                        target_x = np.interp(nose.x, (mid_x - span_x / 2, mid_x + span_x / 2), (margin, screen_w - margin))
+                        target_y = np.interp(nose.y, (mid_y - span_y / 2, mid_y + span_y / 2), (margin, screen_h - margin))
+
+                        # Apply a small deadband filter to eliminate micro-jitter when head is stationary
+                        diff_x = target_x - prev_x
+                        diff_y = target_y - prev_y
+                        if abs(diff_x) > 1.5 or abs(diff_y) > 1.5:
+                            prev_x += diff_x / smoothing
+                            prev_y += diff_y / smoothing
+                            pyautogui.moveTo(prev_x, prev_y)
+                            if log_file:
+                                log_file.write(f"EVENT: Cursor Update Sent | Target: ({prev_x:.1f}, {prev_y:.1f}) | Frame: {last_frame_id}\n")
+                                log_file.flush()
+
+                target_coords = (target_x, target_y)
+
+            else:
+                # Face lost: check frame-persistence buffer to tolerate brief landmark drops
+                face_loss_count += 1
+                if face_loss_count <= 5 and prev_x is not None:
+                    face_detected = True
+                    if log_file:
+                        log_file.write(f"EVENT: Face Detected (Persistence Buffer) | Frame: {last_frame_id}\n")
+                        log_file.flush()
+                    target_x, target_y = prev_x, prev_y
+                    target_coords = (target_x, target_y)
+                else:
+                    face_detected = False
+                    blink_state = "No Face"
+                    blink_dur = 0.0
+                    blink_start = 0
+                    blink_locked_pos = None
+                    target_x, target_y = prev_x, prev_y
+                    target_coords = (target_x, target_y)
+
+            # Decrement post-click freeze countdown on each frame
+            if post_click_freeze_frames > 0:
+                post_click_freeze_frames -= 1
+
+            # ---------------- HAND SCROLL ----------------
+            hand = hand_detector.detect(mp_image)
+
+            if hand.hand_landmarks:
+                lm_hand = hand.hand_landmarks[0]
+                finger = lm_hand[8]
+                knuckle = lm_hand[6]
+
+                # Calculate bounding box dimensions and tracking confidence
+                xs = [pt.x for pt in lm_hand]
+                ys = [pt.y for pt in lm_hand]
+                hand_bbox_w = max(xs) - min(xs)
+                hand_bbox_h = max(ys) - min(ys)
+                hand_conf = hand.handedness[0][0].score
+
+                # Only track and trigger scroll if the index finger is extended pointing upwards
+                if finger.y < knuckle.y:
+                    hand_loss_frames = 0
+                    finger_history.append(finger.y)
+                    if len(finger_history) > 5:
+                        finger_history.pop(0)
+
+                    if len(finger_history) >= 3:
+                        dy = finger_history[-1] - finger_history[0]
+                        now = time.time()
+
+                        if now - last_scroll > SCROLL_COOLDOWN:
+                            if dy < -0.012:
+                                pyautogui.scroll(150)
+                                last_scroll = now
+                                control_status["last_action"] = "Scroll Up"
+                                if log_file:
+                                    log_file.write(f"EVENT: Scroll Up | Frame: {last_frame_id}\n")
+                                finger_history.clear()
+                            elif dy > 0.012:
+                                pyautogui.scroll(-150)
+                                last_scroll = now
+                                control_status["last_action"] = "Scroll Down"
+                                if log_file:
+                                    log_file.write(f"EVENT: Scroll Down | Frame: {last_frame_id}\n")
+                                finger_history.clear()
+                else:
+                    hand_loss_frames += 1
+                    if hand_loss_frames > 5:
+                        finger_history.clear()
+            else:
+                hand_loss_frames += 1
+                if hand_loss_frames > 5:
+                    finger_history.clear()
+
+            hand_detected = (hand_loss_frames <= 5)
+
+            # Update live status dict for playground
+            control_status["face_detected"] = face_detected
+            control_status["hand_detected"] = hand_detected
+            control_status["blink_detected"] = blink_detected
+
+            if log_file:
+                finger_y_str = f"{finger.y:.4f}" if (hand_detected and finger is not None) else "N/A"
+                log_line = (
+                    f"Frame: {last_frame_id} | Face: {face_detected} | "
+                    f"EAR: {eye_openness:.4f} (Thresh: {dynamic_threshold:.3f}) | "
+                    f"Blink State: {blink_state} | Blink Dur: {blink_dur:.3f}s | "
+                    f"Hand: {hand_detected} | Hand Conf: {hand_conf:.4f} | "
+                    f"Hand BBox: {hand_bbox_w:.4f}x{hand_bbox_h:.4f} | "
+                    f"Hand Lost Frames: {hand_loss_frames} | "
+                    f"Finger Y: {finger_y_str} | "
+                    f"Action: {control_status['last_action']}\n"
+                )
+                log_file.write(log_line)
+                log_file.flush()
+
+        except pyautogui.FailSafeException:
+            print("PyAutoGUI FailSafe triggered. Exiting mouse control thread.")
+            if log_file:
+                log_file.write("EVENT: Thread Stopped (FailSafeException)\n")
+                log_file.flush()
+            running = False
+            break
+        except Exception as e:
+            print(f"Error in mouse control: {e}")
+            if log_file:
+                log_file.write(f"EXCEPTION in mouse control loop: {e}\n")
+                import traceback
+                traceback.print_exc(file=log_file)
+                log_file.flush()
+
+        if show_window:
+            h_dim, w_dim, _ = frame.shape
+
+            # Draw Hand Search Region (Full Frame Border)
+            cv2.rectangle(frame, (0, 0), (w_dim - 1, h_dim - 1), (0, 255, 255), 2)
+            cv2.putText(frame, f"Hand Search Region: 100% ({w_dim}x{h_dim})", (15, h_dim - 15), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+
+            # Draw Face Bounding Box
+            if face_detected and face.face_landmarks:
+                xs_face = [pt.x for pt in face.face_landmarks[0]]
+                ys_face = [pt.y for pt in face.face_landmarks[0]]
+                f_x1, f_y1 = int(min(xs_face) * w_dim), int(min(ys_face) * h_dim)
+                f_x2, f_y2 = int(max(xs_face) * w_dim), int(max(ys_face) * h_dim)
+                cv2.rectangle(frame, (f_x1, f_y1), (f_x2, f_y2), (255, 0, 0), 2)
+                cv2.putText(frame, "Face", (f_x1, f_y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+
+            # Render hand landmarks and skeleton lines
+            if hand_detected and hand.hand_landmarks:
+                landmarks = hand.hand_landmarks[0]
+                
+                # Draw Hand Bounding Box
+                xs_hand = [pt.x for pt in landmarks]
+                ys_hand = [pt.y for pt in landmarks]
+                h_x1, h_y1 = int(min(xs_hand) * w_dim), int(min(ys_hand) * h_dim)
+                h_x2, h_y2 = int(max(xs_hand) * w_dim), int(max(ys_hand) * h_dim)
+                cv2.rectangle(frame, (h_x1, h_y1), (h_x2, h_y2), (0, 255, 0), 2)
+                cv2.putText(frame, f"Hand (Conf: {hand_conf:.2f})", (h_x1, h_y1 - 5), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+                # Draw joint vertices
+                for lm_pt in landmarks:
+                    cx, cy = int(lm_pt.x * w_dim), int(lm_pt.y * h_dim)
+                    cv2.circle(frame, (cx, cy), 4, (0, 255, 0), -1)
+                # Draw bones connections
+                connections = [
+                    (0,1), (1,2), (2,3), (3,4),
+                    (0,5), (5,6), (6,7), (7,8),
+                    (5,9), (9,10), (10,11), (11,12),
+                    (9,13), (13,14), (14,15), (15,16),
+                    (13,17), (17,18), (18,19), (19,20),
+                    (0,17)
+                ]
+                for conn in connections:
+                    pt1 = landmarks[conn[0]]
+                    pt2 = landmarks[conn[1]]
+                    cv2.line(frame, (int(pt1.x * w_dim), int(pt1.y * h_dim)), 
+                                    (int(pt2.x * w_dim), int(pt2.y * h_dim)), (0, 165, 255), 2)
+
+            # Draw diagnostics overlay
+            overlay_h, overlay_w = 290, 380
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (10, 10), (10 + overlay_w, 10 + overlay_h), (0, 0, 0), -1)
+            frame = cv2.addWeighted(overlay, 0.7, frame, 0.3, 0)
+
+            # Text settings
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5
+            color = (0, 255, 0) if face_detected else (0, 0, 255)
+            thickness = 1
+
+            # Camera metadata from shared_camera
+            cam_idx = shared_camera.src
+            cam_name = shared_camera.device_name
+            cam_w = shared_camera.width
+            cam_h = shared_camera.height
+
+            lines = [
+                f"Camera: Index {cam_idx} ({cam_name})",
+                f"Resolution: {cam_w}x{cam_h}",
+                f"Face Detected: {face_detected}",
+                f"EAR: {eye_openness:.4f} (Thresh: {dynamic_threshold:.3f})" if face_detected else "EAR: N/A",
+                f"Blink State: {blink_state} (Dur: {blink_dur:.2f}s)",
+                f"Hand Detected: {hand_detected}",
+                f"Hand Confidence: {hand_conf:.4f}" if (hand_detected and hand_conf > 0.0) else "Hand Confidence: N/A",
+                f"Hand BBox Width: {hand_bbox_w:.4f}" if (hand_detected and hand_bbox_w > 0.0) else "Hand BBox Width: N/A",
+                f"Hand BBox Height: {hand_bbox_h:.4f}" if (hand_detected and hand_bbox_h > 0.0) else "Hand BBox Height: N/A",
+                f"Hand Lost Counter: {hand_loss_frames}",
+                f"Finger Y: {finger.y:.4f}" if (hand_detected and finger is not None) else "Finger Y: N/A",
+                f"Scroll Trigger State: {control_status['last_action']}",
+                f"Cursor Position: ({prev_x:.1f}, {prev_y:.1f})"
+            ]
+
+            for idx, line in enumerate(lines):
+                cv2.putText(frame, line, (20, 30 + idx * 20), font, font_scale, color, thickness)
+
+            cv2.imshow("AI Cursor (Upgraded)", frame)
+
+            # 🔥 ESC / Q TO STOP
+            key = cv2.waitKey(1)
+            if key in [27, ord('q')]:
+                running = False
+                break
+
+    # 🔥 CLEAN EXIT
+    running = False
+    control_status["cursor_active"] = False
+    control_status["face_detected"] = False
+    control_status["hand_detected"] = False
+    control_status["blink_detected"] = False
+    control_status["last_action"] = "Stopped"
+    shared_camera.stop()
+    if log_file:
+        try:
+            log_file.write("EVENT: Thread Stopped\n")
+            log_file.write("=== pipeline_debug.log closed ===\n")
+            log_file.close()
+        except Exception:
+            pass
+    if show_window:
+        cv2.destroyAllWindows()
+
+
+def stop_mouse_control():
+    global running
+    running = False
+
+
+if __name__ == "__main__":
+    start_mouse_control(show_window=True)

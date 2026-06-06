@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Exam Terminated</title>
+
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial;
+            background: #111;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: red;
+            font-size: 50px;
+        }
+
+        h2 {
+            margin-top: 30px;
+        }
+
+        .images {
+            margin-top: 20px;
+        }
+
+        .card {
+            display: inline-block;
+            margin: 15px;
+            border: 2px solid red;
+            border-radius: 10px;
+            padding: 10px;
+            background: #222;
+        }
+
+        .card p {
+            margin: 5px;
+            font-size: 16px;
+            color: #ffcccb;
+        }
+
+        img {
+            width: 250px;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 18px;
+            background-color: red;
+            border: none;
+            color: white;
+            cursor: pointer;
+            margin-top: 30px;
+            border-radius: 8px;
+        }
+
+        button:hover {
+            background-color: darkred;
+        }
+
+        .no-data {
+            margin-top: 30px;
+            font-size: 20px;
+            color: #ccc;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <h1>🚨 EXAM TERMINATED 🚨</h1>
+
+    <!-- SAFE COUNT (prevents crash if undefined) -->
+    <p>Total Violations: <strong>{{ count | default(0) }}</strong></p>
+
+    <h2>Captured Evidence</h2>
+
+    <!-- SAFE LIST HANDLING -->
+    {% set screenshots = screenshots | default([]) %}
+
+    {% if screenshots and screenshots|length > 0 %}
+        <div class="images">
+            {% for item in screenshots %}
+                <div class="card">
+                    <p>Reason: {{ item.reason | default('unknown') }}</p>
+
+                    {% if item.image %}
+                        <img src="data:image/jpeg;base64,{{ item.image }}">
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-data">
+            No screenshots available
+        </div>
+    {% endif %}
+
+    <button onclick="window.location.href='/'">Go Home</button>
+
+</body>
+
+</html>

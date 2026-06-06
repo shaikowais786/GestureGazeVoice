@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Exam Submitted</title>
+
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial;
+            background-color: #f4f4f4;
+        }
+
+        .box {
+            text-align: center;
+            padding: 40px;
+            border-radius: 12px;
+            background: white;
+            width: 380px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.15);
+        }
+
+        h1 {
+            color: green;
+            font-size: 26px;
+        }
+
+        p {
+            font-size: 16px;
+            color: #444;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #2e6cff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="box">
+        <h1>✅ Exam Submitted Successfully</h1>
+        <h2> Your Score: {{score}} / {{total}}</h2>
+        <p>You cannot re-enter the exam.</p>
+
+        <button onclick="window.location.href='/'">Go Home</button>
+    </div>
+
+</body>
+
+</html>

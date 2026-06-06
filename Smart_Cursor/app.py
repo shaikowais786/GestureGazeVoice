@@ -1,0 +1,493 @@
+import cv2
+from flask import Flask, render_template, Response, jsonify, request
+import mediapipe as mp
+import math
+import time
+import atexit
+import base64
+import threading
+import webbrowser
+from ultralytics import YOLO
+from mouse_control import start_mouse_control
+from camera_manager import shared_camera
+
+# Mediapipe Tasks API
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+
+# 🖱️ MOUSE CONTROL
+from mouse_control import start_mouse_control
+app = Flask(__name__)
+
+correct_answers = {
+    "q1": "A",
+    "q2": "A",
+    "q3": "B",
+    "q4": "B",
+    "q5": "B",
+    "q6": "A",
+    "q7": "C",
+    "q8": "A",
+    "q9": "B",
+    "q10": "B"
+}
+
+
+
+# ---------------- CAMERA ----------------
+camera = shared_camera
+
+def start_camera():
+    if not shared_camera.start():
+        print("Camera failed to open")
+    else:
+        print("Camera started successfully")
+
+# ---------------- YOLO ----------------
+yolo_model = None
+MOBILE_CLASS_ID = 67
+
+
+
+# ---------------- VARIABLES ----------------
+CHEATING_LIMIT = 3
+CHEAT_COOLDOWN = 1.0
+# Thresholds
+PITCH_THRESHOLD = 50
+LOOK_DOWN_TIME_LIMIT = 1.0
+LOOK_DOWN_COUNT_LIMIT = 5
+FACE_MISSING_TIME = 2.0
+face_missing_start = None
+CHEATING_LIMIT = 3    # terminate after more than 3
+
+last_cheat_time = 0
+cheating_count = 0
+exam_terminated = False
+warning_msg = ""
+screenshot_list = []
+def reset_exam():
+    global cheating_count, last_cheat_time, exam_terminated, warning_msg, screenshot_list, face_missing_start
+    cheating_count = 0
+    last_cheat_time = 0
+    exam_terminated = False
+    warning_msg = ""
+    screenshot_list = []
+    face_missing_start = None
+
+def save_screenshot(frame, reason):
+    global screenshot_list
+    _, buffer = cv2.imencode(".jpg", frame)
+    img_base64 = base64.b64encode(buffer).decode("utf-8")
+    screenshot_list.append({"image": img_base64, "reason": reason})
+
+# ---------------- VIDEO STREAM ----------------
+def generate_frames():
+    global cheating_count, last_cheat_time, exam_terminated, warning_msg
+    global face_missing_start, yolo_model
+    frame_counter=0
+    print("generate frames started")
+    face_missing_start = None
+    start_camera()
+
+    if yolo_model is None:
+        print("Lazy loading YOLOv8 model...")
+        yolo_model = YOLO("yolov8n.pt")
+    
+    
+
+  
+    # HEAD PITCH FUNCTION
+   
+    def calculate_pitch(landmarks, w, h):
+        forehead = landmarks[10]
+        nose = landmarks[1]
+        chin = landmarks[152]
+        fy, ny, cy = forehead.y * h, nose.y * h, chin.y * h
+        pitch_angle = math.degrees(math.atan((cy - ny - (ny - fy)) / (h * 0.3)))
+        return pitch_angle
+
+  
+    # BLINK DETECTION FUNCTION
+    
+    def is_blinking(landmarks, h):
+        L_top = landmarks[159].y * h
+        L_bottom = landmarks[145].y * h
+        R_top = landmarks[386].y * h
+        R_bottom = landmarks[374].y * h
+        left_gap = abs(L_bottom - L_top)
+        right_gap = abs(R_bottom - R_top)
+        avg_gap = (left_gap + right_gap) / 2
+        return avg_gap < 5
+
+    
+    # EYE DIRECTION FUNCTION
+  
+    def detect_eye_direction(landmarks, w, h):
+        left_iris = landmarks[468]
+        right_iris = landmarks[473]
+        L_cx, L_cy = left_iris.x * w, left_iris.y * h
+        R_cx, R_cy = right_iris.x * w, right_iris.y * h
+
+        L_top = landmarks[159].y * h
+        L_bottom = landmarks[145].y * h
+        R_top = landmarks[386].y * h
+        R_bottom = landmarks[374].y * h
+
+        eyelid_top = (L_top + R_top) / 2
+        eyelid_bottom = (L_bottom + R_bottom) / 2
+        vertical_ratio = (((L_cy + R_cy) / 2) - eyelid_top) / (eyelid_bottom - eyelid_top)
+
+        L_left = landmarks[33].x * w
+        L_right = landmarks[133].x * w
+        R_left = landmarks[362].x * w
+        R_right = landmarks[263].x * w
+        left_ratio = (L_cx - L_left) / (L_right - L_left)
+        right_ratio = (R_cx - R_left) / (R_right - R_left)
+        horizontal_ratio = (left_ratio + right_ratio) / 2
+
+        if horizontal_ratio < 0.30:
+            return "LEFT"
+        elif horizontal_ratio > 0.70:
+            return "RIGHT"
+        elif vertical_ratio < 0.30:
+            return "DOWN"
+        elif vertical_ratio > 0.70:
+            return "UP"
+        else:
+            return "CENTER"
+    base_options = python.BaseOptions(model_asset_path="face_landmarker.task")
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.VIDEO,
+        num_faces=10,
+        min_face_detection_confidence=0.5,
+        min_face_presence_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+    with vision.FaceLandmarker.create_from_options(options) as face_detector:
+
+        last_frame_id = -1
+        while True:
+            success, frame, last_frame_id = shared_camera.read(last_frame_id=last_frame_id)
+
+            if not success:
+                if not shared_camera.running:
+                    break
+                time.sleep(0.01)
+                continue
+
+            frame = cv2.flip(frame, 1)
+            frame = cv2.resize(frame, (640, 480))
+            frame_counter += 1
+            process = (frame_counter % 3 == 0)
+
+            h, w, _ = frame.shape
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            cheating_detected = False
+            cheat_reason = ""
+            if process:
+              
+                # YOLO MOBILE DETECTION
+               
+                yolo_results = yolo_model(frame)
+                mobile_found = False
+
+                for r in yolo_results:
+                    for box in r.boxes:
+                        cls = int(box.cls[0])
+
+                        if cls == MOBILE_CLASS_ID:
+                            mobile_found = True
+
+                if mobile_found:
+                    cheating_detected = True
+                    cheat_reason = "mobile_detected"
+
+                
+                # FACE + GAZE + HEAD POSE
+             
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                results = face_detector.detect_for_video(mp_image, int(time.time() * 1000))
+
+                if not results.face_landmarks:
+                    if face_missing_start is None:
+                        face_missing_start = time.time()
+
+                    if time.time() - face_missing_start >= FACE_MISSING_TIME:
+                        cheating_detected = True
+                        cheat_reason = "face_not_visible"
+
+                else:
+                    face_missing_start = None
+
+                    if len(results.face_landmarks) > 1:
+                        cheating_detected = True
+                        cheat_reason = "multiple_persons"
+
+                    else:
+                        landmarks = results.face_landmarks[0]
+                        pitch = calculate_pitch(landmarks, w, h)
+
+                        if pitch > PITCH_THRESHOLD:
+                            cheating_detected = True
+                            cheat_reason = "looking_down_long"
+
+                        if not is_blinking(landmarks, h):
+                            eye_dir = detect_eye_direction(landmarks, w, h)
+
+                            if eye_dir in ["LEFT", "RIGHT", "UP", "DOWN"]:
+                                cheating_detected = True
+                                cheat_reason = f"looking_{eye_dir.lower()}"
+
+           
+            # HANDLE CHEATING EVENT
+          
+            current_time = time.time()
+
+            
+
+            if cheating_detected:
+                if time.time() - last_cheat_time > CHEAT_COOLDOWN:
+                    cheating_count += 1
+                    last_cheat_time = time.time()
+                    save_screenshot(frame, cheat_reason)
+
+            if cheating_count >= CHEATING_LIMIT:
+                exam_terminated = True
+                break
+
+            cv2.putText(frame, f"Warnings: {cheating_count}", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+            if warning_msg:
+                cv2.putText(frame, warning_msg, (20, 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+            _, buffer = cv2.imencode(".jpg", frame)
+            frame = buffer.tobytes()
+
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+# ---------------- ROUTES ----------------
+
+@app.route("/")
+def home():
+    return render_template("home.html")
+
+@app.route("/playground")
+def playground():
+    return render_template("playground.html")
+
+@app.route("/mouse_status")
+def mouse_status():
+    from mouse_control import control_status
+    return jsonify(control_status)
+
+@app.route("/launch_app")
+def launch_app():
+    name = request.args.get("name", "")
+    import subprocess
+    import os
+    try:
+        if name == "calculator":
+            subprocess.Popen("calc.exe")
+        elif name == "notepad":
+            subprocess.Popen("notepad.exe")
+        elif name == "chrome":
+            chrome_path = None
+            # 1. Registry lookup
+            try:
+                import winreg
+                for hive in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                    try:
+                        with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe") as key:
+                            val, _ = winreg.QueryValueEx(key, "")
+                            if val and os.path.exists(val):
+                                chrome_path = val
+                                break
+                    except FileNotFoundError:
+                        continue
+            except Exception:
+                pass
+
+            # 2. File paths lookup if registry fails
+            if not chrome_path:
+                local_appdata = os.environ.get("LOCALAPPDATA", "")
+                search_paths = [
+                    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+                    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+                ]
+                if local_appdata:
+                    search_paths.append(os.path.join(local_appdata, "Google/Chrome/Application/chrome.exe").replace("\\", "/"))
+                for path in search_paths:
+                    if os.path.exists(path):
+                        chrome_path = path
+                        break
+
+            if chrome_path:
+                # Open Chrome in normal windowed mode to allow easy access to title bar controls
+                subprocess.Popen([chrome_path, "--window-size=1024,768", "--window-position=200,200"])
+            else:
+                raise FileNotFoundError("Google Chrome executable path could not be resolved.")
+        return jsonify({"status": "success", "app": name})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+mouse_thread = None
+
+@app.route("/start_mouse")
+def start_mouse():
+    global mouse_thread
+
+    # Read show_window query parameter, default to True for diagnostics/live testing
+    show_window_param = request.args.get('show_window', 'true').lower() == 'true'
+
+    if mouse_thread is None or not mouse_thread.is_alive():
+        mouse_thread = threading.Thread(target=start_mouse_control, kwargs={"show_window": show_window_param})
+        mouse_thread.start()
+
+    return jsonify({"status": f"Cursor Mode Started (show_window={show_window_param})"})
+@app.route("/stop_mouse")
+def stop_mouse():
+    from mouse_control import stop_mouse_control
+    stop_mouse_control()
+    return jsonify({"status": "Cursor Mode Stopped"})
+@app.route("/camera")
+def camera_page():
+    try:
+        reset_exam()
+        start_camera()
+        return render_template("camera.html")
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+@app.route("/exam")
+def exam():
+    reset_exam()
+    start_camera()
+    return render_template("index.html")
+
+@app.route("/video_feed")
+def video_feed():
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route("/exam_status")
+def exam_status():
+    return jsonify({
+        "terminated": exam_terminated,
+        "count": cheating_count,
+        "warning": warning_msg
+    })
+
+@app.route("/submit_exam", methods=["POST"])
+def submit_exam():
+    global exam_terminated, camera_active
+
+    score = 0
+    total = len(correct_answers)
+
+    for q, correct in correct_answers.items():
+        user_ans = request.form.get(q)
+        if user_ans == correct:
+            score += 1
+
+    exam_terminated = True
+    camera_active = False
+    release_camera()
+
+    return render_template("submitted.html",
+                           score=score,
+                           total=total)
+
+@app.route("/terminated")
+def terminated():
+    global exam_terminated, camera_active
+
+    exam_terminated = True
+    camera_active = False   
+    release_camera() 
+    return render_template("terminated.html",
+                           count=cheating_count,
+                           screenshots=screenshot_list)
+
+# CLEANUP
+def release_camera():
+    shared_camera.stop()
+
+atexit.register(release_camera)
+print(app.url_map)
+
+def open_browser():
+    import os
+    pid = os.getpid()
+    run_main = os.environ.get('WERKZEUG_RUN_MAIN')
+    print(f"[DEBUG] open_browser() execution started in PID {pid} (WERKZEUG_RUN_MAIN={run_main})")
+    
+    # Sleep briefly to give the Flask server time to spin up
+    time.sleep(1.2)
+    print(f"[DEBUG] Launching browser automatically in PID {pid}...")
+    launched = False
+    
+    # Try to launch standard Windows Chrome paths first
+    for path in [
+        "C:/Program Files/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+    ]:
+        if os.path.exists(path):
+            try:
+                import subprocess
+                subprocess.Popen([path, "--window-size=1280,800", "--window-position=100,100", "http://127.0.0.1:5000/"])
+                launched = True
+                break
+            except Exception:
+                pass
+
+    if not launched:
+        webbrowser.open("http://127.0.0.1:5000/")
+
+if __name__ == "__main__":
+    import os
+    # Start browser auto-launch in a daemon background thread.
+    # Flask uses the Werkzeug reloader in debug mode by default, which spawns a parent and child process.
+    # To prevent duplicate browser launches, we only launch:
+    # 1. In the child process (WERKZEUG_RUN_MAIN='true') if use_reloader is enabled.
+    # 2. In the parent process (WERKZEUG_RUN_MAIN is None) if use_reloader is disabled.
+    use_reloader = True  # Enable development auto-reloader
+    
+    should_launch = False
+    run_main = os.environ.get('WERKZEUG_RUN_MAIN')
+    
+    # We use a file-based lock to prevent spawning a new tab on every code change reload
+    lock_file = os.path.join(os.path.dirname(__file__), ".browser_launched")
+    
+    if run_main is None:
+        # Parent process: clean up lock file if it exists
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+            except Exception:
+                pass
+    
+    if use_reloader:
+        if run_main == 'true':
+            # Check if we already launched the browser during this server session
+            if not os.path.exists(lock_file):
+                try:
+                    with open(lock_file, "w") as f:
+                        f.write("launched")
+                except Exception:
+                    pass
+                should_launch = True
+    else:
+        if run_main is None:
+            should_launch = True
+            
+    if should_launch:
+        threading.Thread(target=open_browser, daemon=True).start()
+    else:
+        pid = os.getpid()
+        print(f"[DEBUG] Skipping browser auto-launch thread creation in PID {pid} (WERKZEUG_RUN_MAIN={run_main})")
+        
+    app.run(debug=True, use_reloader=use_reloader)

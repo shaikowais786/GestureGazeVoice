@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Playground - GestureGaze</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --card-bg: rgba(255, 255, 255, 0.02);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --font-family: 'Outfit', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background: radial-gradient(circle at 50% 0%, #171923 0%, var(--bg-color) 80%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            overflow-x: hidden;
+        }
+
+        /* Top Nav */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1300px;
+            width: 100%;
+            margin: 0 auto 30px auto;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 20px;
+        }
+
+        .brand-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a5b4fc 0%, var(--accent-blue) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(-4px);
+        }
+
+        /* Layout Grid */
+        .playground-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+            max-width: 1300px;
+            width: 100%;
+            margin: 0 auto;
+            flex-grow: 1;
+        }
+
+        /* Cards and Panels */
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 25px;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Sidebar Status elements */
+        .status-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        .status-label {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .status-badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.3s ease;
+        }
+
+        .badge-active {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-inactive {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .badge-blue {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Control Toggles */
+        .controls-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: auto;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-family: var(--font-family);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: var(--accent-red);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Main Workspace sections */
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        /* App Grid card */
+        .app-launcher-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .launcher-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .launcher-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(59, 130, 246, 0.4);
+            background: rgba(59, 130, 246, 0.03);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 0 15px rgba(59, 130, 246, 0.1);
+        }
+
+        .launcher-card:active {
+            transform: scale(0.97);
+        }
+
+        .launcher-icon {
+            font-size: 2.2rem;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .launcher-name {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .launcher-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Click Tester Section */
+        .tester-content {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+
+        .click-target-btn {
+            flex: 1;
+            height: 140px;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%);
+            border: 2px dashed rgba(139, 92, 246, 0.3);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            user-select: none;
+            color: var(--text-main);
+            gap: 8px;
+        }
+
+        .click-target-btn:hover {
+            border-color: var(--accent-purple);
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+            transform: scale(1.02);
+        }
+
+        .click-target-btn:active {
+            transform: scale(0.98);
+        }
+
+        .click-target-icon {
+            font-size: 2rem;
+            animation: pulse 2s infinite;
+        }
+
+        .click-target-label {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .click-target-subtext {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .click-counters {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 250px;
+        }
+
+        .counter-card {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .counter-card.active-flash {
+            animation: flashHighlight 0.5s ease-out;
+        }
+
+        .counter-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .counter-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* Scroll Tester Area */
+        .scroll-container {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.15);
+            padding: 15px;
+            scroll-behavior: smooth;
+        }
+
+        .scroll-item {
+            padding: 20px;
+            margin-bottom: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .scroll-item:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .scroll-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .item-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* Custom Scrollbar for dark theme */
+        .scroll-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scroll-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .scroll-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Log console inside status sidebar */
+        .log-console {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            height: 160px;
+            padding: 10px 15px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            color: #a78bfa;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            margin-bottom: 6px;
+            line-height: 1.4;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
+        /* Toast Notifications */
+        #toast {
+            visibility: hidden;
+            min-width: 280px;
+            background-color: #1e1b4b;
+            color: #fff;
+            text-align: center;
+            border-radius: 12px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1000;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: visibility 0s, opacity 0.3s linear;
+            opacity: 0;
+        }
+
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.08); opacity: 1; filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.4)); }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+
+        @keyframes flashHighlight {
+            0% { background: rgba(139, 92, 246, 0.3); border-color: var(--accent-purple); }
+            100% { background: rgba(255, 255, 255, 0.01); border-color: var(--card-border); }
+        }
+
+        @keyframes clickEffect {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        .clicked-animation {
+            animation: clickEffect 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <span class="brand-title">GestureGaze Demo Playground</span>
+        <a href="/" class="back-btn">← Back to Dashboard</a>
+    </header>
+
+    <div class="playground-grid">
+        <!-- Sidebar Panel: Status & Diagnostics -->
+        <div class="panel">
+            <h3 class="panel-title">📡 Real-Time Status</h3>
+            <ul class="status-list">
+                <li class="status-item">
+                    <span class="status-label">Cursor Control Mode</span>
+                    <span id="badge-cursor" class="status-badge badge-inactive">Inactive</span>
+                </li>
+                <li class="status-item">
+                    <span class="status-label">Face Detection</span>
+                    <span id="badge-face" class="status-badge badge-inactive">Off</span>
+                </li>
+                <li class="status-item">
+                    <span class="status-label">Hand Detection</span>
+                    <span id="badge-hand" class="status-badge badge-inactive">Off</span>
+                </li>
+                <li class="status-item">
+                    <span class="status-label">Blink Detection</span>
+                    <span id="badge-blink" class="status-badge badge-inactive">Open</span>
+                </li>
+                <li class="status-item" style="border-top: 1px solid var(--card-border); padding-top: 15px; margin-top: 5px;">
+                    <span class="status-label" style="font-weight: 600;">Last Action</span>
+                    <span id="txt-last-action" style="font-weight: bold; color: var(--accent-blue);">None</span>
+                </li>
+            </ul>
+
+            <h3 class="panel-title" style="margin-top: 15px;">📜 Action Log</h3>
+            <div id="log-console" class="log-console">
+                <div class="log-entry"><span class="log-time">00:00:00</span><span>System initialized. Waiting...</span></div>
+            </div>
+
+            <div class="controls-group" style="margin-top: 25px;">
+                <button class="btn btn-primary" onclick="startCursorMode()">Start Smart Control</button>
+                <button class="btn btn-danger" onclick="stopCursorMode()">Stop Smart Control</button>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- App Launch Section -->
+            <div class="panel">
+                <h3 class="panel-title">🚀 OS App Launcher (Blink Clicks Target)</h3>
+                <div class="app-launcher-grid">
+                    <div class="launcher-card" onclick="launchApp('calculator')">
+                        <span class="launcher-icon">🧮</span>
+                        <div class="launcher-name">Calculator</div>
+                        <div class="launcher-desc">Launches Windows calc.exe</div>
+                    </div>
+                    <div class="launcher-card" onclick="launchApp('notepad')">
+                        <span class="launcher-icon">📝</span>
+                        <div class="launcher-name">Notepad</div>
+                        <div class="launcher-desc">Launches Windows notepad.exe</div>
+                    </div>
+                    <div class="launcher-card" onclick="launchApp('chrome')">
+                        <span class="launcher-icon">🌐</span>
+                        <div class="launcher-name">Google Chrome</div>
+                        <div class="launcher-desc">Launches Web Browser</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Click Testing Area -->
+            <div class="panel">
+                <h3 class="panel-title">🎯 Eye-Blink Click Tester</h3>
+                <div class="tester-content">
+                    <div id="click-target" class="click-target-btn" onclick="registerClick(event)" ondblclick="registerDoubleClick(event)">
+                        <div class="click-target-icon">🔮</div>
+                        <div class="click-target-label">Blink Click Here</div>
+                        <div class="click-target-subtext">Short Blink = Click | Long Blink (>0.6s) = Double Click</div>
+                    </div>
+
+                    <div class="click-counters">
+                        <div class="counter-card" id="counter-single">
+                            <span class="counter-label">Single Clicks</span>
+                            <span id="cnt-single" class="counter-value">0</span>
+                        </div>
+                        <div class="counter-card" id="counter-double">
+                            <span class="counter-label">Double Clicks</span>
+                            <span id="cnt-double" class="counter-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scroll Testing Area -->
+            <div class="panel">
+                <h3 class="panel-title">📜 Scroll Testing Area (Hand Scroll Target)</h3>
+                <div class="scroll-container" id="scroll-box">
+                    <div class="scroll-item">
+                        <span>🚀 Scroll Item 1 - Move your hand and point index finger up/down to scroll.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">Item A</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🔮 Scroll Item 2 - The buffer stabilizes scrolling and rejects hand jitter.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #10b981, #047857);">Item B</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>💡 Scroll Item 3 - This scroll area remains inside the playground.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">Item C</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>⚡ Scroll Item 4 - Hover the cursor here and perform gestures.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #f59e0b, #b45309);">Item D</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🔥 Scroll Item 5 - Hand scrolling is system-wide using PyAutoGUI.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #ec4899, #be185d);">Item E</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🌟 Scroll Item 6 - Check responsiveness across browsers and documents.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">Item F</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🛠️ Scroll Item 7 - Rolling buffer holds 5 frames of vertical movements.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #10b981, #047857);">Item G</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🎓 Scroll Item 8 - Threshold set at 0.012 for smooth, controlled motion.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">Item H</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🛰️ Scroll Item 9 - Debouncing occurs immediately on scroll trigger.</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #f59e0b, #b45309);">Item I</span>
+                    </div>
+                    <div class="scroll-item">
+                        <span>🏁 Scroll Item 10 - End of list. Scroll back up to verify!</span>
+                        <span class="item-badge" style="background: linear-gradient(135deg, #ec4899, #be185d);">Item J</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">Message</div>
+
+    <script>
+        let singleClickCount = 0;
+        let doubleClickCount = 0;
+        let lastLoggedAction = "";
+
+        // Toast Helper
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        // Action Logging Helper
+        function logAction(action) {
+            const consoleBox = document.getElementById("log-console");
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            
+            const entry = document.createElement("div");
+            entry.className = "log-entry";
+            entry.innerHTML = `<span class="log-time">${timeStr}</span><span>${action}</span>`;
+            consoleBox.appendChild(entry);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // Mode Controls
+        function startCursorMode() {
+            // Requesting start_mouse with show_window=false to operate background mouse control seamlessly
+            fetch('/start_mouse?show_window=false')
+            .then(res => res.json())
+            .then(data => {
+                showToast(data.status);
+                logAction("Start cursor request sent.");
+            })
+            .catch(() => showToast("Failed to start Smart Control"));
+        }
+
+        function stopCursorMode() {
+            fetch('/stop_mouse')
+            .then(res => res.json())
+            .then(data => {
+                showToast(data.status);
+                logAction("Stop cursor request sent.");
+            })
+            .catch(() => showToast("Failed to stop Smart Control"));
+        }
+
+        // App Launching
+        function launchApp(appName) {
+            logAction(`Launching ${appName}...`);
+            fetch(`/launch_app?name=${appName}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    showToast(`Successfully launched ${appName}!`);
+                    logAction(`Launch successful: ${appName}`);
+                } else {
+                    showToast(`Error: ${data.message}`);
+                    logAction(`Launch failed: ${data.message}`);
+                }
+            })
+            .catch(() => {
+                showToast(`Failed to trigger launch for ${appName}`);
+                logAction(`Launch request error: ${appName}`);
+            });
+        }
+
+        // Register visual clicks
+        function registerClick(e) {
+            // Avoid triggering double click on single click propagation
+            singleClickCount++;
+            document.getElementById("cnt-single").textContent = singleClickCount;
+            
+            const card = document.getElementById("counter-single");
+            card.classList.remove("active-flash");
+            void card.offsetWidth; // Trigger reflow
+            card.classList.add("active-flash");
+
+            const target = document.getElementById("click-target");
+            target.classList.remove("clicked-animation");
+            void target.offsetWidth;
+            target.classList.add("clicked-animation");
+            
+            logAction("Interactive target clicked.");
+        }
+
+        function registerDoubleClick(e) {
+            // Subtract two single click count that would have run first to keep numbers neat
+            singleClickCount = Math.max(0, singleClickCount - 2);
+            document.getElementById("cnt-single").textContent = singleClickCount;
+
+            doubleClickCount++;
+            document.getElementById("cnt-double").textContent = doubleClickCount;
+            
+            const card = document.getElementById("counter-double");
+            card.classList.remove("active-flash");
+            void card.offsetWidth;
+            card.classList.add("active-flash");
+            
+            logAction("Interactive target double-clicked.");
+        }
+
+        // Status Polling Loop
+        function pollStatus() {
+            fetch('/mouse_status')
+            .then(res => res.json())
+            .then(data => {
+                // Update Badges
+                updateBadge("badge-cursor", data.cursor_active, "Active", "Inactive", true);
+                updateBadge("badge-face", data.face_detected, "Detected", "Off", false);
+                updateBadge("badge-hand", data.hand_detected, "Detected", "Off", false);
+                updateBadge("badge-blink", data.blink_detected, "Blinking", "Open", false, true);
+
+                // Last Action
+                const actionElement = document.getElementById("txt-last-action");
+                if (data.last_action && data.last_action !== lastLoggedAction && data.last_action !== "None") {
+                    actionElement.textContent = data.last_action;
+                    logAction(`Backend Action: ${data.last_action}`);
+                    lastLoggedAction = data.last_action;
+                }
+            })
+            .catch(err => {
+                // Silently ignore or show offline in console if needed
+            });
+        }
+
+        function updateBadge(id, active, activeText, inactiveText, isModeBadge, isBlinkBadge) {
+            const badge = document.getElementById(id);
+            if (active) {
+                badge.textContent = activeText;
+                badge.className = "status-badge " + (isModeBadge ? "badge-blue" : "badge-active");
+            } else {
+                badge.textContent = inactiveText;
+                badge.className = "status-badge badge-inactive";
+            }
+        }
+
+        // Start polling status every 150ms
+        setInterval(pollStatus, 150);
+    </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ===== Virtual Environments =====
+venv/
+.venv/
+env/
+.env
+
+# ===== IDE and Editor Files =====
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== Build Artifacts =====
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ===== Large Model Files =====
+**/models/model/
+**/models/model_small_backup/
+**/*.pt
+**/*.task
+
+# ===== Databases =====
+*.db
+
+# ===== Logs =====
+*.log
+pipeline_debug.log
+
+# ===== Temporary and Runtime Files =====
+uploads/
+snapshots/
+**/.browser_launched
+**/confirmation_results.txt
+**/confirmation_results_utf8.txt
+**/test_output.txt
+**/robustness_results.txt
+
+# ===== Test and Debug Artifacts =====
+test_excel.xlsx
+
+# ===== OS Files =====
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ===== Existing Git Repos (Voice module has its own .git) =====
+GestureGaze_Voice/.git/

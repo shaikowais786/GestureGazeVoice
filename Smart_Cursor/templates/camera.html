@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Check</title>
+    <style>
+        body { text-align:center; font-family: Arial; }
+        img { margin-top:20px; border:3px solid red; }
+        button {
+            margin-top:20px;
+            padding:10px 20px;
+            font-size:18px;
+            background:green;
+            color:white;
+            border:none;
+            border-radius:8px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>📷 Camera Verification</h2>
+<p>Please ensure your face is clearly visible</p>
+
+<img src="{{ url_for('video_feed') }}" width="640" height="480">
+<br>
+<button onclick="startExam()">Start Exam</button>
+
+<script>
+function startExam() {
+    window.location.href = "/exam";
+}
+</script>
+
+</body>
+</html>
