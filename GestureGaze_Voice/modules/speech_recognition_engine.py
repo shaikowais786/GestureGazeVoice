@@ -21,21 +21,75 @@ class SpeechRecognitionEngine:
 
     def _initialize_microphone(self):
         try:
-            # Use system default microphone instead of hardcoded index
-            self.microphone = sr.Microphone(device_index=None, sample_rate=self.sample_rate)
+            p = pyaudio.PyAudio()
             
-            # Log the mic name for demo purposes
+            default_idx = None
+            default_name = "System Default"
             try:
-                import pyaudio
-                p = pyaudio.PyAudio()
                 default_idx = p.get_default_input_device_info()['index']
                 mics = sr.Microphone.list_microphone_names()
-                mic_name = mics[default_idx] if default_idx < len(mics) else "System Default"
-                logging.info(f"Using microphone: [{default_idx}] {mic_name}")
-                p.terminate()
+                default_name = mics[default_idx] if default_idx < len(mics) else "System Default"
             except Exception:
-                logging.info("Using system default microphone")
-
+                pass
+            
+            selected_idx = default_idx
+            selected_name = default_name
+            
+            # Check if default microphone is a virtual or problematic device (like Camo)
+            is_virtual = False
+            if default_name:
+                name_lower = default_name.lower()
+                virtual_terms = ["camo", "virtual", "droidcam", "obs", "stealth", "steam", "voicemeeter", "vb-audio"]
+                if any(term in name_lower for term in virtual_terms):
+                    is_virtual = True
+            
+            if is_virtual:
+                logging.info(f"Default microphone '{default_name}' is a virtual device. Searching for physical fallback...")
+                fallback_idx = None
+                fallback_name = None
+                fallback_score = -1
+                
+                for i in range(p.get_device_count()):
+                    try:
+                        info = p.get_device_info_by_index(i)
+                        if info.get('maxInputChannels', 0) > 0:
+                            mics = sr.Microphone.list_microphone_names()
+                            name = mics[i] if i < len(mics) else info.get('name', '')
+                            name_lower = name.lower()
+                            
+                            # Skip virtual, loopback, mapper, etc.
+                            if any(term in name_lower for term in ["camo", "virtual", "droidcam", "obs", "stealth", "steam", "voicemeeter", "vb-audio", "mapper", "capture"]):
+                                continue
+                                
+                            score = 0
+                            if "realtek" in name_lower:
+                                score += 10
+                            if "microphone" in name_lower:
+                                score += 5
+                            if "internal" in name_lower or "built-in" in name_lower:
+                                score += 3
+                            if "array" in name_lower or "high definition" in name_lower:
+                                score += 2
+                                
+                            if score > fallback_score:
+                                fallback_score = score
+                                fallback_idx = i
+                                fallback_name = name
+                    except Exception:
+                        pass
+                
+                if fallback_idx is not None:
+                    selected_idx = fallback_idx
+                    selected_name = fallback_name
+                    logging.info(f"Selected physical fallback microphone: [{selected_idx}] {selected_name}")
+                else:
+                    logging.warning("No physical fallback microphone found. Sticking with default.")
+            
+            p.terminate()
+            
+            logging.info(f"Using microphone: [{selected_idx if selected_idx is not None else 'Default'}] {selected_name}")
+            self.microphone = sr.Microphone(device_index=selected_idx, sample_rate=self.sample_rate)
+            
             with self.microphone as source:
                 logging.info("Calibrating microphone for ambient noise...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=1.0)

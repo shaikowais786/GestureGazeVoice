@@ -2,16 +2,15 @@ import cv2
 import threading
 import time
 import logging
-import numpy as np
 
 # Configure local logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("SharedCamera")
 
 class SharedCamera:
-    def __init__(self, src=0, cached_cap=None):
+    def __init__(self, src=0):
         self.src = src
-        self.cap = cached_cap
+        self.cap = None
         self.ref_count = 0
         self.lock = threading.Lock()
         self.condition = threading.Condition(self.lock)
@@ -33,20 +32,12 @@ class SharedCamera:
             self.ref_count += 1
             logger.info(f"SharedCamera start requested. Ref count: {self.ref_count}")
             if not self.running:
-                if self.cap is None:
-                    logger.info("SharedCamera: Lazily detecting and opening camera device...")
-                    self.src, self.cap = detect_camera_index()
-                    logger.info(f"SharedCamera: Detected index {self.src}")
-                
-                if self.cap is None:
-                    logger.info(f"Opening VideoCapture device with source index: {self.src}...")
-                    # Prioritize DirectShow (CAP_DSHOW) on Windows for virtual/webcam capture compatibility
-                    self.cap = cv2.VideoCapture(self.src, cv2.CAP_DSHOW)
-                    if not self.cap.isOpened():
-                        logger.info("DirectShow failed to open, falling back to default camera API...")
-                        self.cap = cv2.VideoCapture(self.src)
-                else:
-                    logger.info("Reusing cached VideoCapture device...")
+                logger.info(f"Opening VideoCapture device with source index: {self.src}...")
+                # Prioritize DirectShow (CAP_DSHOW) on Windows for virtual/webcam capture compatibility
+                self.cap = cv2.VideoCapture(self.src, cv2.CAP_DSHOW)
+                if not self.cap.isOpened():
+                    logger.info("DirectShow failed to open, falling back to default camera API...")
+                    self.cap = cv2.VideoCapture(self.src)
                 
                 if not self.cap.isOpened():
                     logger.error("Failed to open VideoCapture device")
@@ -63,15 +54,10 @@ class SharedCamera:
                 else:
                     self.device_name = f"Camera (Index {self.src})"
 
-                # Read a frame to verify brightness for verification metrics
-                ret, frame = self.cap.read()
-                brightness = np.mean(frame) if (ret and frame is not None) else 0.0
-
                 logger.info("==========================================")
-                logger.info(f"CAMERA SELECTED : Index {self.src}")
-                logger.info(f"FRIENDLY NAME   : {self.device_name}")
-                logger.info(f"RESOLUTION      : {self.width}x{self.height}")
-                logger.info(f"FRAME BRIGHTNESS: {brightness:.2f}")
+                logger.info(f"CAMERA SELECTED: Index {self.src}")
+                logger.info(f"FRIENDLY NAME  : {self.device_name}")
+                logger.info(f"RESOLUTION     : {self.width}x{self.height}")
                 logger.info("==========================================")
 
                 self.running = True
@@ -148,14 +134,14 @@ import os
 
 def detect_camera_index():
     if "CAMERA_INDEX" in os.environ:
-        return int(os.environ["CAMERA_INDEX"]), None
+        return int(os.environ["CAMERA_INDEX"])
     
     # Try index 1 first (phone webcam/Camo), fallback to index 0, checking for real non-black stream
     for idx in [1, 0]:
         cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
-        opened_with_dshow = cap.isOpened()
-        
-        if opened_with_dshow:
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(idx)
+        if cap.isOpened():
             # Warm up and read a few frames to verify it isn't streaming solid black
             is_valid = False
             for _ in range(5):
@@ -163,30 +149,11 @@ def detect_camera_index():
                 if ret and frame is not None and frame.any():
                     is_valid = True
                     break
-            if is_valid:
-                # Do NOT release the cap here, return it to be reused
-                return idx, cap
-            
-            # If opened but streaming black frames, release and try default backend
             cap.release()
-            
-        # Fallback to default backend (either because DSHOW failed to open, or DSHOW opened but streamed black frames)
-        cap = cv2.VideoCapture(idx)
-        if cap.isOpened():
-            is_valid = False
-            for _ in range(5):
-                ret, frame = cap.read()
-                if ret and frame is not None and frame.any():
-                    is_valid = True
-                    break
             if is_valid:
-                # Do NOT release the cap here, return it to be reused
-                return idx, cap
-            cap.release()
-            
-    return 0, None
+                return idx
+    return 0
 
-# Do NOT detect/open camera at import time. We will do it lazily inside SharedCamera.start().
-camera_index = None
-cached_cap = None
-shared_camera = SharedCamera(camera_index, cached_cap)
+camera_index = detect_camera_index()
+logger.info(f"Initializing SharedCamera instance with source index: {camera_index}")
+shared_camera = SharedCamera(camera_index)

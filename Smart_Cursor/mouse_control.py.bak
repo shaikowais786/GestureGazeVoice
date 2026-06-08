@@ -9,47 +9,6 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from camera_manager import shared_camera
 
-def log_pyautogui_action(action_name, dest_pos=None):
-    try:
-        curr_pos = pyautogui.position()
-        size = pyautogui.size()
-        log_line = f"FAILSAFE_DIAGNOSTIC | Action: {action_name} | Current Cursor: {curr_pos} | Destination: {dest_pos} | Screen Size: {size}\n"
-        print(log_line.strip())
-        with open("C:\\FinalProject\\Smart_Cursor\\failsafe_diagnostic.log", "a", encoding="utf-8") as f:
-            f.write(log_line)
-    except Exception as e:
-        print(f"Error logging diagnostic: {e}")
-
-def safe_pyautogui_call(action_fn, *args, **kwargs):
-    try:
-        curr_x, curr_y = pyautogui.position()
-        screen_w, screen_h = pyautogui.size()
-        failsafe_corners = [
-            (0, 0),
-            (0, screen_h - 1),
-            (screen_w - 1, 0),
-            (screen_w - 1, screen_h - 1)
-        ]
-        if (curr_x, curr_y) in failsafe_corners:
-            print(f"FailSafe Prevention: Cursor detected at corner {curr_x, curr_y}. Nudging to center.")
-            pyautogui.FAILSAFE = False
-            pyautogui.moveTo(screen_w // 2, screen_h // 2)
-            pyautogui.FAILSAFE = True
-            time.sleep(0.1)
-        return action_fn(*args, **kwargs)
-    except pyautogui.FailSafeException as e:
-        print(f"FailSafeException caught inside safe_pyautogui_call during execution of {action_fn.__name__ if hasattr(action_fn, '__name__') else str(action_fn)}: {e}")
-        try:
-            pyautogui.FAILSAFE = False
-            screen_w, screen_h = pyautogui.size()
-            pyautogui.moveTo(screen_w // 2, screen_h // 2)
-            pyautogui.FAILSAFE = True
-            print("Successfully recovered cursor to screen center after FailSafeException.")
-        except Exception as recovery_err:
-            print(f"Failed to recover cursor to center: {recovery_err}")
-            pyautogui.FAILSAFE = True
-        return None
-
 # 🔥 GLOBAL CONTROL FLAG
 running = False
 
@@ -102,8 +61,7 @@ def start_mouse_control(show_window=True):
         print(f"Startup FailSafe Recovery: Cursor detected at corner {curr_x, curr_y}. Moving to screen center.")
         # Temporarily disable FAILSAFE just for this corrective move
         pyautogui.FAILSAFE = False
-        log_pyautogui_action("moveTo (Startup Recovery)", (screen_w // 2, screen_h // 2))
-        safe_pyautogui_call(pyautogui.moveTo, screen_w // 2, screen_h // 2)
+        pyautogui.moveTo(screen_w // 2, screen_h // 2)
         pyautogui.FAILSAFE = True
         time.sleep(0.5)
 
@@ -266,8 +224,7 @@ def start_mouse_control(show_window=True):
                             safe_margin = 10
                             target_lock_x = max(safe_margin, min(screen_w - safe_margin, blink_locked_pos[0]))
                             target_lock_y = max(safe_margin, min(screen_h - safe_margin, blink_locked_pos[1]))
-                            log_pyautogui_action("moveTo (Blink Lock)", (target_lock_x, target_lock_y))
-                            safe_pyautogui_call(pyautogui.moveTo, target_lock_x, target_lock_y)
+                            pyautogui.moveTo(target_lock_x, target_lock_y)
                             prev_x, prev_y = target_lock_x, target_lock_y
                             if log_file:
                                 log_file.write(f"EVENT: Cursor Update Sent (Blink Lock Move) | Target: ({prev_x:.1f}, {prev_y:.1f}) | Frame: {last_frame_id}\n")
@@ -275,14 +232,12 @@ def start_mouse_control(show_window=True):
 
                         if duration > BLINK_MIN:
                             if duration > 0.6:
-                                log_pyautogui_action("doubleClick", None)
-                                safe_pyautogui_call(pyautogui.doubleClick)
+                                pyautogui.doubleClick()
                                 control_status["last_action"] = "Double Click"
                                 if log_file:
                                     log_file.write(f"EVENT: Double Click | Frame: {last_frame_id}\n")
                             else:
-                                log_pyautogui_action("click", None)
-                                safe_pyautogui_call(pyautogui.click)
+                                pyautogui.click()
                                 control_status["last_action"] = "Single Click"
                                 if log_file:
                                     log_file.write(f"EVENT: Single Click | Frame: {last_frame_id}\n")
@@ -321,8 +276,7 @@ def start_mouse_control(show_window=True):
                             prev_x = max(safe_margin, min(screen_w - safe_margin, prev_x))
                             prev_y = max(safe_margin, min(screen_h - safe_margin, prev_y))
                             
-                            log_pyautogui_action("moveTo (Cursor Update)", (prev_x, prev_y))
-                            safe_pyautogui_call(pyautogui.moveTo, prev_x, prev_y)
+                            pyautogui.moveTo(prev_x, prev_y)
                             if log_file:
                                 log_file.write(f"EVENT: Cursor Update Sent | Target: ({prev_x:.1f}, {prev_y:.1f}) | Frame: {last_frame_id}\n")
                                 log_file.flush()
@@ -380,16 +334,14 @@ def start_mouse_control(show_window=True):
 
                         if now - last_scroll > SCROLL_COOLDOWN:
                             if dy < -0.012:
-                                log_pyautogui_action("scroll Up", None)
-                                safe_pyautogui_call(pyautogui.scroll, 150)
+                                pyautogui.scroll(150)
                                 last_scroll = now
                                 control_status["last_action"] = "Scroll Up"
                                 if log_file:
                                     log_file.write(f"EVENT: Scroll Up | Frame: {last_frame_id}\n")
                                 finger_history.clear()
                             elif dy > 0.012:
-                                log_pyautogui_action("scroll Down", None)
-                                safe_pyautogui_call(pyautogui.scroll, -150)
+                                pyautogui.scroll(-150)
                                 last_scroll = now
                                 control_status["last_action"] = "Scroll Down"
                                 if log_file:

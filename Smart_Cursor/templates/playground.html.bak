@@ -644,12 +644,6 @@
         let doubleClickCount = 0;
         let lastLoggedAction = "";
 
-        // Temporary Diagnostic click logger
-        document.addEventListener('click', function(e) {
-            console.log("DIAGNOSTIC CLICK:", e.target, `Coords: (${e.clientX}, ${e.clientY})`);
-            fetch(`/log_diagnostic_click?target=${encodeURIComponent(e.target.tagName + '.' + e.target.className)}&x=${e.clientX}&y=${e.clientY}`);
-        });
-
         // Toast Helper
         function showToast(message) {
             const toast = document.getElementById("toast");

@@ -323,8 +323,6 @@ def refocus_browser_thread():
 @app.route("/launch_app")
 def launch_app():
     name = request.args.get("name", "")
-    with open("diagnostic_clicks.log", "a", encoding="utf-8") as f:
-        f.write(f"LAUNCH:{name}\n")
     import subprocess
     import os
     try:
@@ -510,15 +508,6 @@ def open_browser():
 
     if not launched:
         webbrowser.open("http://127.0.0.1:5000/")
-
-@app.route("/log_diagnostic_click")
-def log_diagnostic_click():
-    target = request.args.get("target", "")
-    x = request.args.get("x", "")
-    y = request.args.get("y", "")
-    with open("diagnostic_clicks.log", "a", encoding="utf-8") as f:
-        f.write(f"CLICK:{target}:{x}:{y}\n")
-    return jsonify({"status": "logged"})
 
 if __name__ == "__main__":
     import os

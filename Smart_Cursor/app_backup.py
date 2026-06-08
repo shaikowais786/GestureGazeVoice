@@ -295,36 +295,9 @@ def mouse_status():
     from mouse_control import control_status
     return jsonify(control_status)
 
-def refocus_browser_thread():
-    # Wait for the launched app to steal focus
-    time.sleep(1.0)
-    try:
-        import pygetwindow as gw
-        import win32gui
-        import win32com.client
-        
-        target_title = 'Demo Playground - GestureGaze - Google Chrome'
-        titles = gw.getWindowsWithTitle(target_title)
-        if titles:
-            win = titles[0]
-            hwnd = win._hWnd
-            # Restore if minimized
-            if win32gui.IsIconic(hwnd):
-                win32gui.ShowWindow(hwnd, 9)  # SW_RESTORE is 9
-            
-            # Send Alt-key press using COM to release focus lock
-            shell = win32com.client.Dispatch("WScript.Shell")
-            shell.SendKeys('%')
-            win32gui.SetForegroundWindow(hwnd)
-            print("[DEBUG] Refocused browser window after launch.")
-    except Exception as e:
-        print(f"[ERROR] Failed to refocus browser: {e}")
-
 @app.route("/launch_app")
 def launch_app():
     name = request.args.get("name", "")
-    with open("diagnostic_clicks.log", "a", encoding="utf-8") as f:
-        f.write(f"LAUNCH:{name}\n")
     import subprocess
     import os
     try:
@@ -369,11 +342,6 @@ def launch_app():
                 subprocess.Popen([chrome_path, "--window-size=1024,768", "--window-position=200,200"])
             else:
                 raise FileNotFoundError("Google Chrome executable path could not be resolved.")
-        
-        # Trigger background refocus thread (disabled to keep focus on the launched application)
-        # import threading
-        # threading.Thread(target=refocus_browser_thread, daemon=True).start()
-        
         return jsonify({"status": "success", "app": name})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
@@ -510,15 +478,6 @@ def open_browser():
 
     if not launched:
         webbrowser.open("http://127.0.0.1:5000/")
-
-@app.route("/log_diagnostic_click")
-def log_diagnostic_click():
-    target = request.args.get("target", "")
-    x = request.args.get("x", "")
-    y = request.args.get("y", "")
-    with open("diagnostic_clicks.log", "a", encoding="utf-8") as f:
-        f.write(f"CLICK:{target}:{x}:{y}\n")
-    return jsonify({"status": "logged"})
 
 if __name__ == "__main__":
     import os
