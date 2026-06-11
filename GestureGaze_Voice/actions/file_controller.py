@@ -268,7 +268,8 @@ class FileController:
     def delete_file(self, file_path):
         if os.path.exists(file_path):
             try:
-                os.remove(file_path)
+                from send2trash import send2trash
+                send2trash(file_path)
                 self.refresh_cache()
                 return True
             except Exception as e:
